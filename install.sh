@@ -4,8 +4,32 @@ set -e
 # 3X-UI Auto-Installer
 # Remote run: bash <(curl -sL https://raw.githubusercontent.com/MushroomForYou/setup/main/install.sh) --domain your.domain --ip 1.2.3.4 --email admin@domain.com
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIR="$SCRIPT_DIR/lib"
+REPO_URL="https://raw.githubusercontent.com/MushroomForYou/setup/main"
+
+# Detect if running locally or remotely
+if [[ "${BASH_SOURCE[0]}" == "/dev/fd/"* ]]; then
+    # Running via curl - download libs to temp directory
+    LIB_DIR=$(mktemp -d)
+    trap "rm -rf $LIB_DIR" EXIT
+
+    download_lib() {
+        local file="$1"
+        curl -sL "$REPO_URL/lib/$file" -o "$LIB_DIR/$file"
+    }
+
+    download_lib "colors.sh"
+    download_lib "logger.sh"
+    download_lib "cli.sh"
+    download_lib "validators.sh"
+    download_lib "system.sh"
+    download_lib "ssl.sh"
+    download_lib "nginx.sh"
+    download_lib "panel.sh"
+else
+    # Running locally
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    LIB_DIR="$SCRIPT_DIR/lib"
+fi
 
 # Source library modules
 source "$LIB_DIR/colors.sh"
