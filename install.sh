@@ -1,9 +1,6 @@
 #!/bin/bash
 set -e
 
-# 3X-UI Auto-Installer
-# Remote run: bash <(curl -sL https://raw.githubusercontent.com/MushroomForYou/setup/main/install.sh) --domain your.domain --ip 1.2.3.4 --email admin@domain.com
-
 REPO_URL="https://raw.githubusercontent.com/MushroomForYou/setup/main"
 
 # Detect if running locally or remotely
@@ -43,7 +40,6 @@ source "$LIB_DIR/panel.sh"
 
 # Main entry point
 main() {
-    show_banner
 
     # Parse CLI arguments
     parse_args "$@"

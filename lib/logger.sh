@@ -1,5 +1,4 @@
 #!/bin/bash
-# Logging functions with timestamps and colors
 
 # Log levels
 export LOG_LEVEL_DEBUG=0
@@ -76,7 +75,6 @@ progress() {
     fi
 }
 
-# Box drawing
 draw_box() {
     local title="$1"
     local width=56

@@ -1,5 +1,4 @@
 #!/bin/bash
-# System management functions
 
 # Update system packages
 update_system() {

@@ -1,5 +1,4 @@
 #!/bin/bash
-# Color definitions for terminal output
 
 # ANSI color codes
 export RED='\033[0;31m'

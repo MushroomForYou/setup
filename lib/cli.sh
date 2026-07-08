@@ -1,5 +1,4 @@
 #!/bin/bash
-# CLI argument parsing
 
 # Default values
 USERNAME="admin"
@@ -88,27 +87,6 @@ parse_args() {
     done
 }
 
-# Show banner
-show_banner() {
-    clear
-    echo -e "${GREEN}"
-    cat << 'EOF'
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║     ██████╗  ██████╗ ██████╗     ██╗    ██╗███████╗██████╗   ║
-║     ██╔══██╗██╔═══██╗██╔══██╗    ██║    ██║██╔════╝██╔══██╗  ║
-║     ██████╔╝██║   ██║██║  ██║    ██║ █╗ ██║█████╗  ██████╔╝  ║
-║     ██╔══██╗██║   ██║██║  ██║    ██║███╗██║██╔══╝  ██╔══██╗  ║
-║     ██║  ██║╚██████╔╝██████╔╝    ╚███╔███╔╝███████╗██║  ██║  ║
-║     ╚═╝  ╚═╝ ╚═════╝ ╚═════╝      ╚══╝╚══╝ ╚══════╝╚═╝  ╚═╝  ║
-║                                                              ║
-║                   Auto-Installer v1.0                        ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-EOF
-    echo -e "${NC}"
-}
-
 # Show configuration
 show_config() {
     echo -e "${CYAN}Configuration:${NC}"
@@ -116,6 +94,6 @@ show_config() {
     echo -e "  ${ICON_SERVER} IP:      ${YELLOW}$IP${NC}"
     echo -e "  ${ICON_KEY} Email:   ${YELLOW}$ACME_EMAIL${NC}"
     echo -e "  ${ICON_LOCK} User:    ${YELLOW}$USERNAME${NC}"
-    echo -e "  ${ICON_LOCK} Pass:    ${YELLOW}$(printf '*%.0s' $(seq 1 ${#PASSWORD}))${NC}"
+    echo -e "  ${ICON_LOCK} Pass:    ${YELLOW}$PASSWORD${NC}"
     echo ""
 }

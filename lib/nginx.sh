@@ -1,5 +1,4 @@
 #!/bin/bash
-# Nginx configuration functions
 
 # Configure Nginx as reverse proxy
 configure_nginx() {

@@ -1,5 +1,4 @@
 #!/bin/bash
-# Validation functions
 
 # Validate required arguments
 validate_args() {

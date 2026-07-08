@@ -1,16 +1,3 @@
-# 3X-UI Auto-Installer
-
-Автоматический установщик панели 3X-UI с поддержкой SSL сертификатов Let's Encrypt и настройкой Nginx в качестве reverse proxy.
-
-## Возможности
-
-- Автоматическая установка и настройка 3X-UI панели
-- Получение SSL сертификатов через Let's Encrypt (acme.sh)
-- Настройка Nginx как reverse proxy с SSL offloading
-- Настройка UFW firewall
-- Автоматическое обновление SSL сертификатов
-- Красивый вывод с прогрессом установки
-
 ## Требования
 
 - Ubuntu/Debian сервер
@@ -62,38 +49,6 @@ sudo bash install.sh --domain your.domain.com --ip 1.2.3.4 --email admin@domain.
 | `-q, --quiet` | Тихий режим (только ошибки) |
 | `-v, --verbose` | Подробный вывод (debug) |
 
-## Примеры
-
-### Минимальная установка
-
-```bash
-bash <(curl -sL https://raw.githubusercontent.com/MushroomForYou/setup/main/install.sh) \
-  --domain vpn.example.com \
-  --ip 192.168.1.100 \
-  --email admin@example.com
-```
-
-### С кастомными учетными данными
-
-```bash
-bash <(curl -sL https://raw.githubusercontent.com/MushroomForYou/setup/main/install.sh) \
-  --domain vpn.example.com \
-  --ip 192.168.1.100 \
-  --email admin@example.com \
-  --username myuser \
-  --password mysecretpass
-```
-
-### Тихий режим (для автоматизации)
-
-```bash
-bash <(curl -sL https://raw.githubusercontent.com/MushroomForYou/setup/main/install.sh) \
-  --domain vpn.example.com \
-  --ip 192.168.1.100 \
-  --email admin@example.com \
-  --quiet
-```
-
 ## Структура проекта
 
 ```
@@ -123,45 +78,3 @@ setup/
 8. Настраивает Nginx как reverse proxy
 9. Запускает все сервисы
 10. Выводит информацию для доступа
-
-## Полезные команды
-
-После установки вы можете использовать:
-
-```bash
-x-ui              # Меню управления панелью
-x-ui status       # Статус панели
-x-ui settings     # Просмотр учетных данных
-x-ui update       # Обновление панели
-x-ui restart      # Перезапуск панели
-```
-
-## Устранение неполадок
-
-### SSL сертификат не выдается
-
-1. Проверьте, что A-запись домена указывает на правильный IP
-2. Убедитесь, что порт 80 доступен из интернета
-3. Если используете Cloudflare, отключите оранжевое облако (proxy)
-
-### Панель недоступна
-
-1. Проверьте статус: `x-ui status`
-2. Проверьте порты: `ufw status`
-3. Проверьте логи: `journalctl -u x-ui -f`
-
-### Nginx ошибки
-
-1. Проверьте конфигурацию: `nginx -t`
-2. Проверьте логи: `tail -f /var/log/nginx/error.log`
-
-## Безопасность
-
-- Меняйте дефолтный пароль `admin/admin` на сложный
-- Используйте нестандартный username
-- Регулярно обновляйте панель: `x-ui update`
-- Мониторьте логи доступа
-
-## Автор
-
-MushroomForYou
