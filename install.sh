@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-REPO_URL="https://raw.githubusercontent.com/VPN-EXPRESS/setup-script/main"
+REPO_URL="https://raw.githubusercontent.com/MushroomForYou/setup/main"
 
 # Detect if running locally or remotely
 if [[ "${BASH_SOURCE[0]}" == "/dev/fd/"* ]]; then
