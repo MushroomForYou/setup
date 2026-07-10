@@ -5,12 +5,12 @@
 - Домен с A-записью, указывающей на IP сервера
 - Открытые порты: 22 (SSH), 80 (HTTP), 443 (HTTPS)
 
-## Быстрый старт
+## Быстрый старт ( пока не работает из-за приватности репозитория )
 
 ### Удаленная установка через curl
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/MushroomForYou/setup/main/install.sh) \
+bash <(curl -sL https://raw.githubusercontent.com/VPN-EXPRESS/setup-script/main/install.sh) \
   --domain your.domain.com \
   --ip 1.2.3.4 \
   --email admin@domain.com
@@ -19,7 +19,7 @@ bash <(curl -sL https://raw.githubusercontent.com/MushroomForYou/setup/main/inst
 ### Локальная установка
 
 ```bash
-git clone https://github.com/MushroomForYou/setup.git
+git clone https://github.com/VPN-EXPRESS/setup-script.git
 cd setup
 sudo bash install.sh --domain your.domain.com --ip 1.2.3.4 --email admin@domain.com
 ```

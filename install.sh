@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-REPO_URL="https://raw.githubusercontent.com/MushroomForYou/setup/main"
+REPO_URL="https://raw.githubusercontent.com/VPN-EXPRESS/setup-script/main"
 
 # Detect if running locally or remotely
 if [[ "${BASH_SOURCE[0]}" == "/dev/fd/"* ]]; then
@@ -37,6 +37,7 @@ source "$LIB_DIR/system.sh"
 source "$LIB_DIR/ssl.sh"
 source "$LIB_DIR/nginx.sh"
 source "$LIB_DIR/panel.sh"
+source "$LIB_DIR/inbounds.sh"
 
 # Main entry point
 main() {
@@ -84,9 +85,14 @@ main() {
     step 10 "Starting services"
     start_services
 
+    step 11 "Creating VLESS Reality inbound"
+    create_vless_inbound
+
+    step 12 "Creating Hysteria2 inbound"
+    create_hysteria_inbound
+
     # Show success banner
     show_success "$DOMAIN" "$IP" "$PANEL_PORT" "$USERNAME" "$PASSWORD" "$WEB_BASE_PATH" "$DB_TYPE" "$API_TOKEN"
 }
 
-# Run main
 main "$@"

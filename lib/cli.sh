@@ -36,7 +36,7 @@ Examples:
   bash install.sh --domain vpn.example.com --ip 1.2.3.4 --email admin@example.com --username myuser --password mypass
 
   # Remote execution via curl
-  bash <(curl -sL https://raw.githubusercontent.com/MushroomForYou/setup/main/install.sh) \\
+  bash <(curl -sL https://raw.githubusercontent.com/VPN-EXPRESS/setup-script/main/install.sh) \\
     --domain vpn.example.com --ip 1.2.3.4 --email admin@example.com
 
 EOF
