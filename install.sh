@@ -22,6 +22,7 @@ if [[ "${BASH_SOURCE[0]}" == "/dev/fd/"* ]]; then
     download_lib "ssl.sh"
     download_lib "nginx.sh"
     download_lib "panel.sh"
+    download_lib "inbounds.sh"
 else
     # Running locally
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
