@@ -44,11 +44,9 @@ api_call_with_retry() {
             response=""
         fi
 
-        if echo "$response" | jq empty >/dev/null 2>&1; then
-            if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
-                printf '%s\n' "$response"
-                return 0
-            fi
+        if response_is_successful "$response"; then
+            printf '%s\n' "$response"
+            return 0
         fi
 
         if [ "$attempt" -lt "$retries" ]; then
@@ -63,6 +61,22 @@ api_call_with_retry() {
     return 1
 }
 
+response_is_successful() {
+    local data="$1"
+    local success
+
+    if [ -z "$data" ]; then
+        return 1
+    fi
+
+    if ! echo "$data" | jq empty >/dev/null 2>&1; then
+        return 1
+    fi
+
+    success=$(echo "$data" | jq -r '.success // false' 2>/dev/null)
+    [ "$success" = "true" ]
+}
+
 json_is_valid() {
     local data="$1"
     echo "$data" | jq empty >/dev/null 2>&1
@@ -70,7 +84,7 @@ json_is_valid() {
 
 json_has_success() {
     local data="$1"
-    echo "$data" | jq -e '.success' >/dev/null 2>&1
+    response_is_successful "$data"
 }
 
 json_get() {
@@ -93,6 +107,9 @@ create_vless_inbound() {
         echo "$CERT_RESP"
         return 1
     fi
+
+    info "API response:"
+    printf '%s\n' "$CERT_RESP"
 
     if ! json_is_valid "$CERT_RESP" || ! json_has_success "$CERT_RESP"; then
         err "Failed to generate X25519 cert. Raw response:"
@@ -117,6 +134,9 @@ create_vless_inbound() {
         echo "$SCAN_RESP"
         return 1
     fi
+
+    info "API response:"
+    printf '%s\n' "$SCAN_RESP"
 
     # Select Best Target
     log "Selecting best Reality target..."
@@ -231,6 +251,9 @@ create_vless_inbound() {
         echo "$ADD_RESP"
         return 1
     fi
+
+    info "API response:"
+    printf '%s\n' "$ADD_RESP"
 
     if ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
         err "Failed to create inbound. Raw response:"
@@ -373,6 +396,9 @@ create_hysteria_inbound() {
         echo "$ADD_RESP"
         return 1
     fi
+
+    info "API response:"
+    printf '%s\n' "$ADD_RESP"
 
     if ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
         err "Failed to create inbound. Raw response:"
