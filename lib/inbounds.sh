@@ -63,6 +63,22 @@ api_call_with_retry() {
     return 1
 }
 
+json_is_valid() {
+    local data="$1"
+    echo "$data" | jq empty >/dev/null 2>&1
+}
+
+json_has_success() {
+    local data="$1"
+    echo "$data" | jq -e '.success' >/dev/null 2>&1
+}
+
+json_get() {
+    local data="$1"
+    local expr="$2"
+    echo "$data" | jq -r "$expr // empty" 2>/dev/null
+}
+
 create_vless_inbound() {
     local base_url="https://$DOMAIN/$WEB_BASE_PATH"
 
@@ -72,39 +88,58 @@ create_vless_inbound() {
     # Generate X25519 Certificate
     log "Generating X25519 certificate..."
     if ! CERT_RESP=$(api_call_with_retry GET "$base_url/panel/api/server/getNewX25519Cert" "" "" 30 8 3); then
-        err "Failed to generate X25519 cert: $CERT_RESP"
+        err "Failed to generate X25519 cert. Raw response:"
+        echo "$CERT_RESP"
         return 1
     fi
 
-    PRIVATE_KEY=$(echo "$CERT_RESP" | jq -r '.obj.privateKey')
-    PUBLIC_KEY=$(echo "$CERT_RESP" | jq -r '.obj.publicKey')
+    if ! json_is_valid "$CERT_RESP" || ! json_has_success "$CERT_RESP"; then
+        err "Failed to generate X25519 cert. Raw response:"
+        echo "$CERT_RESP"
+        return 1
+    fi
+
+    PRIVATE_KEY=$(json_get "$CERT_RESP" '.obj.privateKey')
+    PUBLIC_KEY=$(json_get "$CERT_RESP" '.obj.publicKey')
+    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
+        err "Received invalid X25519 cert payload: $CERT_RESP"
+        return 1
+    fi
+
     log "X25519 keys generated"
     info "  Public Key:  ${PUBLIC_KEY:0:20}..."
 
     # Scan Reality Targets
     log "Scanning Reality targets (this may take ~30-60s)..."
     if ! SCAN_RESP=$(api_call_with_retry POST "$base_url/panel/api/server/scanRealityTargets" "{}" "" 120 8 3); then
-        err "Scan failed: $SCAN_RESP"
+        err "Scan failed. Raw response:"
+        echo "$SCAN_RESP"
         return 1
     fi
 
     # Select Best Target
     log "Selecting best Reality target..."
+    if ! json_is_valid "$SCAN_RESP" || ! json_has_success "$SCAN_RESP"; then
+        err "Scan failed. Raw response:"
+        echo "$SCAN_RESP"
+        return 1
+    fi
+
     BEST=$(echo "$SCAN_RESP" | jq -r '
         .obj
         | map(select(.feasible == true and .tls13 == true and .h2 == true and .x25519 == true))
         | sort_by(.latencyMs)
         | .[0]
-    ')
+    ' 2>/dev/null)
 
     if [ "$BEST" == "null" ] || [ -z "$BEST" ] || [ "$BEST" == "" ]; then
         err "No suitable Reality target found (required: feasible, tls13, h2, x25519)"
         return 1
     fi
 
-    TARGET=$(echo "$BEST" | jq -r '.target')
-    SERVER_NAMES_JSON=$(echo "$BEST" | jq -c '.serverNames')
-    LATENCY=$(echo "$BEST" | jq -r '.latencyMs')
+    TARGET=$(echo "$BEST" | jq -r '.target' 2>/dev/null)
+    SERVER_NAMES_JSON=$(echo "$BEST" | jq -c '.serverNames' 2>/dev/null)
+    LATENCY=$(echo "$BEST" | jq -r '.latencyMs' 2>/dev/null)
 
     log "Best target selected:"
     info "  Target:  $TARGET"
@@ -191,11 +226,18 @@ create_vless_inbound() {
     # Create Inbound
     log "Creating VLESS Reality inbound..."
     if ! ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3); then
-        err "Failed to create inbound: $ADD_RESP"
+        err "Failed to create inbound. Raw response:"
+        echo "$ADD_RESP"
         return 1
     fi
 
-    INBOUND_ID=$(echo "$ADD_RESP" | jq -r '.obj.id // empty')
+    if ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
+        err "Failed to create inbound. Raw response:"
+        echo "$ADD_RESP"
+        return 1
+    fi
+
+    INBOUND_ID=$(json_get "$ADD_RESP" '.obj.id')
     log "Inbound created successfully!"
     info "  Inbound ID: ${INBOUND_ID:-N/A}"
 
@@ -325,11 +367,18 @@ create_hysteria_inbound() {
     # Create Inbound
     log "Creating Hysteria2 inbound..."
     if ! ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3); then
-        err "Failed to create inbound: $ADD_RESP"
+        err "Failed to create inbound. Raw response:"
+        echo "$ADD_RESP"
         return 1
     fi
 
-    INBOUND_ID=$(echo "$ADD_RESP" | jq -r '.obj.id // empty')
+    if ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
+        err "Failed to create inbound. Raw response:"
+        echo "$ADD_RESP"
+        return 1
+    fi
+
+    INBOUND_ID=$(json_get "$ADD_RESP" '.obj.id')
     log "Inbound created successfully!"
     info "  Inbound ID: ${INBOUND_ID:-N/A}"
 
