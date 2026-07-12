@@ -1,44 +1,77 @@
 #!/bin/bash
 
+api_call() {
+    local method="$1"
+    local url="$2"
+    local data="${3:-}"
+    local extra_headers="${4:-}"
+    local max_time="${5:-30}"
+
+    local cmd=(curl -sS --max-time "$max_time" --connect-timeout 5 \
+        -H "Authorization: Bearer $API_TOKEN" \
+        -H "X-Requested-With: XMLHttpRequest")
+
+    if [ -n "$extra_headers" ]; then
+        IFS='|' read -ra HDRS <<< "$extra_headers"
+        for h in "${HDRS[@]}"; do
+            cmd+=(-H "$h")
+        done
+    fi
+
+    if [ "$method" == "POST" ] && [ -n "$data" ]; then
+        cmd+=(-X POST -d "$data")
+    elif [ "$method" == "POST" ]; then
+        cmd+=(-X POST)
+    fi
+
+    cmd+=("$url")
+    "${cmd[@]}"
+}
+
+api_call_with_retry() {
+    local method="$1"
+    local url="$2"
+    local data="${3:-}"
+    local extra_headers="${4:-}"
+    local max_time="${5:-30}"
+    local retries="${6:-8}"
+    local delay="${7:-3}"
+    local attempt=1
+    local response=""
+
+    while [ "$attempt" -le "$retries" ]; do
+        if ! response=$(api_call "$method" "$url" "$data" "$extra_headers" "$max_time"); then
+            response=""
+        fi
+
+        if echo "$response" | jq empty >/dev/null 2>&1; then
+            if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
+                printf '%s\n' "$response"
+                return 0
+            fi
+        fi
+
+        if [ "$attempt" -lt "$retries" ]; then
+            warn "API call failed or panel not ready yet, retrying ${attempt}/${retries}: $url"
+            sleep "$delay"
+        fi
+
+        attempt=$((attempt + 1))
+    done
+
+    printf '%s\n' "$response"
+    return 1
+}
+
 create_vless_inbound() {
     local base_url="https://$DOMAIN/$WEB_BASE_PATH"
 
     log "Creating VLESS Reality inbound..."
     info "  Base URL: $base_url"
 
-    # API call with Bearer token
-    api_call() {
-        local method="$1"
-        local url="$2"
-        local data="$3"
-        local extra_headers="$4"
-        local max_time="${5:-30}"
-
-        local cmd=(curl -s --max-time "$max_time" \
-            -H "Authorization: Bearer $API_TOKEN" \
-            -H "X-Requested-With: XMLHttpRequest")
-
-        if [ -n "$extra_headers" ]; then
-            IFS='|' read -ra HDRS <<< "$extra_headers"
-            for h in "${HDRS[@]}"; do
-                cmd+=(-H "$h")
-            done
-        fi
-
-        if [ "$method" == "POST" ] && [ -n "$data" ]; then
-            cmd+=(-X POST -d "$data")
-        elif [ "$method" == "POST" ]; then
-            cmd+=(-X POST)
-        fi
-
-        cmd+=("$url")
-        "${cmd[@]}"
-    }
-
     # Generate X25519 Certificate
     log "Generating X25519 certificate..."
-    CERT_RESP=$(api_call GET "$base_url/panel/api/server/getNewX25519Cert")
-    if ! echo "$CERT_RESP" | jq -e '.success' &>/dev/null; then
+    if ! CERT_RESP=$(api_call_with_retry GET "$base_url/panel/api/server/getNewX25519Cert" "" "" 30 8 3); then
         err "Failed to generate X25519 cert: $CERT_RESP"
         return 1
     fi
@@ -50,9 +83,7 @@ create_vless_inbound() {
 
     # Scan Reality Targets
     log "Scanning Reality targets (this may take ~30-60s)..."
-    SCAN_RESP=$(api_call POST "$base_url/panel/api/server/scanRealityTargets" "{}" "" 120)
-
-    if ! echo "$SCAN_RESP" | jq -e '.success' &>/dev/null; then
+    if ! SCAN_RESP=$(api_call_with_retry POST "$base_url/panel/api/server/scanRealityTargets" "{}" "" 120 8 3); then
         err "Scan failed: $SCAN_RESP"
         return 1
     fi
@@ -159,9 +190,7 @@ create_vless_inbound() {
 
     # Create Inbound
     log "Creating VLESS Reality inbound..."
-    ADD_RESP=$(api_call POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded")
-
-    if ! echo "$ADD_RESP" | jq -e '.success' &>/dev/null; then
+    if ! ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3); then
         err "Failed to create inbound: $ADD_RESP"
         return 1
     fi
@@ -206,35 +235,6 @@ create_hysteria_inbound() {
         err "  Key:  $key_file"
         return 1
     fi
-
-    # Helper: API call with Bearer token
-    api_call() {
-        local method="$1"
-        local url="$2"
-        local data="$3"
-        local extra_headers="$4"
-        local max_time="${5:-30}"
-
-        local cmd=(curl -s --max-time "$max_time" \
-            -H "Authorization: Bearer $API_TOKEN" \
-            -H "X-Requested-With: XMLHttpRequest")
-
-        if [ -n "$extra_headers" ]; then
-            IFS='|' read -ra HDRS <<< "$extra_headers"
-            for h in "${HDRS[@]}"; do
-                cmd+=(-H "$h")
-            done
-        fi
-
-        if [ "$method" == "POST" ] && [ -n "$data" ]; then
-            cmd+=(-X POST -d "$data")
-        elif [ "$method" == "POST" ]; then
-            cmd+=(-X POST)
-        fi
-
-        cmd+=("$url")
-        "${cmd[@]}"
-    }
 
     # Generate Random Port
     PORT=$(shuf -i 10000-65000 -n 1)
@@ -324,9 +324,7 @@ create_hysteria_inbound() {
 
     # Create Inbound
     log "Creating Hysteria2 inbound..."
-    ADD_RESP=$(api_call POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded")
-
-    if ! echo "$ADD_RESP" | jq -e '.success' &>/dev/null; then
+    if ! ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3); then
         err "Failed to create inbound: $ADD_RESP"
         return 1
     fi
