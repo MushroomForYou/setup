@@ -81,6 +81,7 @@ json_get() {
 
 create_vless_inbound() {
     local base_url="https://$DOMAIN/$WEB_BASE_PATH"
+    base_url="${base_url%/}"
 
     log "Creating VLESS Reality inbound..."
     info "  Base URL: $base_url"
@@ -263,6 +264,7 @@ create_vless_inbound() {
 
 create_hysteria_inbound() {
     local base_url="https://$DOMAIN/$WEB_BASE_PATH"
+    base_url="${base_url%/}"
     local cert_file="$CERT_DIR/$DOMAIN/fullchain.pem"
     local key_file="$CERT_DIR/$DOMAIN/privkey.pem"
 
