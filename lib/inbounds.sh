@@ -40,9 +40,7 @@ api_call_with_retry() {
     local response=""
 
     while [ "$attempt" -le "$retries" ]; do
-        if ! response=$(api_call "$method" "$url" "$data" "$extra_headers" "$max_time"); then
-            response=""
-        fi
+        response=$(api_call "$method" "$url" "$data" "$extra_headers" "$max_time" 2>/dev/null)
 
         if response_is_successful "$response"; then
             printf '%s\n' "$response"
@@ -50,7 +48,7 @@ api_call_with_retry() {
         fi
 
         if [ "$attempt" -lt "$retries" ]; then
-            warn "API call failed or panel not ready yet, retrying ${attempt}/${retries}: $url"
+            warn "API call failed or panel not ready yet, retrying ${attempt}/${retries}: $url" >&2
             sleep "$delay"
         fi
 
@@ -102,7 +100,10 @@ create_vless_inbound() {
 
     # Generate X25519 Certificate
     log "Generating X25519 certificate..."
-    if ! CERT_RESP=$(api_call_with_retry GET "$base_url/panel/api/server/getNewX25519Cert" "" "" 30 8 3); then
+    CERT_RESP=$(api_call_with_retry GET "$base_url/panel/api/server/getNewX25519Cert" "" "" 30 8 3)
+    local ret=$?
+
+    if [ $ret -ne 0 ] || ! json_is_valid "$CERT_RESP" || ! json_has_success "$CERT_RESP"; then
         err "Failed to generate X25519 cert. Raw response:"
         echo "$CERT_RESP"
         return 1
@@ -110,12 +111,6 @@ create_vless_inbound() {
 
     info "API response:"
     printf '%s\n' "$CERT_RESP"
-
-    if ! json_is_valid "$CERT_RESP" || ! json_has_success "$CERT_RESP"; then
-        err "Failed to generate X25519 cert. Raw response:"
-        echo "$CERT_RESP"
-        return 1
-    fi
 
     PRIVATE_KEY=$(json_get "$CERT_RESP" '.obj.privateKey')
     PUBLIC_KEY=$(json_get "$CERT_RESP" '.obj.publicKey')
@@ -129,7 +124,10 @@ create_vless_inbound() {
 
     # Scan Reality Targets
     log "Scanning Reality targets (this may take ~30-60s)..."
-    if ! SCAN_RESP=$(api_call_with_retry POST "$base_url/panel/api/server/scanRealityTargets" "{}" "" 120 8 3); then
+    SCAN_RESP=$(api_call_with_retry POST "$base_url/panel/api/server/scanRealityTargets" "{}" "" 120 8 3)
+    ret=$?
+
+    if [ $ret -ne 0 ] || ! json_is_valid "$SCAN_RESP" || ! json_has_success "$SCAN_RESP"; then
         err "Scan failed. Raw response:"
         echo "$SCAN_RESP"
         return 1
@@ -140,11 +138,6 @@ create_vless_inbound() {
 
     # Select Best Target
     log "Selecting best Reality target..."
-    if ! json_is_valid "$SCAN_RESP" || ! json_has_success "$SCAN_RESP"; then
-        err "Scan failed. Raw response:"
-        echo "$SCAN_RESP"
-        return 1
-    fi
 
     BEST=$(echo "$SCAN_RESP" | jq -r '
         .obj
@@ -246,16 +239,13 @@ create_vless_inbound() {
 
     # Create Inbound
     log "Creating VLESS Reality inbound..."
-    if ! ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3); then
-        err "Failed to create inbound. Raw response:"
-        echo "$ADD_RESP"
-        return 1
-    fi
+    ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3)
+    ret=$?
 
     info "API response:"
     printf '%s\n' "$ADD_RESP"
 
-    if ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
+    if [ $ret -ne 0 ] || ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
         err "Failed to create inbound. Raw response:"
         echo "$ADD_RESP"
         return 1
@@ -391,16 +381,13 @@ create_hysteria_inbound() {
 
     # Create Inbound
     log "Creating Hysteria2 inbound..."
-    if ! ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3); then
-        err "Failed to create inbound. Raw response:"
-        echo "$ADD_RESP"
-        return 1
-    fi
+    ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3)
+    ret=$?
 
     info "API response:"
     printf '%s\n' "$ADD_RESP"
 
-    if ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
+    if [ $ret -ne 0 ] || ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
         err "Failed to create inbound. Raw response:"
         echo "$ADD_RESP"
         return 1
