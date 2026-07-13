@@ -38,18 +38,24 @@ api_call_with_retry() {
     local delay="${7:-3}"
     local attempt=1
     local response=""
+    local reason=""
 
     while [ "$attempt" -le "$retries" ]; do
-        response=$(api_call "$method" "$url" "$data" "$extra_headers" "$max_time" 2>/dev/null)
+        if ! response=$(api_call "$method" "$url" "$data" "$extra_headers" "$max_time"); then
+            response=""
+        fi
 
         if response_is_successful "$response"; then
             printf '%s\n' "$response"
             return 0
         fi
 
+        reason=$(describe_failure "$response")
         if [ "$attempt" -lt "$retries" ]; then
-            warn "API call failed or panel not ready yet, retrying ${attempt}/${retries}: $url" >&2
+            warn "API call failed (${reason}), retrying ${attempt}/${retries}: $url"
             sleep "$delay"
+        else
+            warn "API call failed (${reason}) on final attempt ${attempt}/${retries}: $url"
         fi
 
         attempt=$((attempt + 1))
@@ -59,25 +65,73 @@ api_call_with_retry() {
     return 1
 }
 
+# Explains *why* response_is_successful rejected a response, without
+# duplicating its validation logic. Used only for logging during retries,
+# so it never needs to be as strict / side-effect-free as the real check.
+describe_failure() {
+    local data="$1"
+    local docs msg
+
+    if [ -z "$data" ]; then
+        echo "empty response (curl failed, timed out, or connection refused)"
+        return
+    fi
+
+    if ! printf '%s' "$data" | jq empty >/dev/null 2>&1; then
+        echo "not valid JSON, first 120 chars: ${data:0:120}"
+        return
+    fi
+
+    docs=$(printf '%s' "$data" | jq -rs 'length' 2>/dev/null)
+    if [ "$docs" != "1" ]; then
+        echo "response contained ${docs} JSON value(s) instead of exactly 1 (duplicated/concatenated body?)"
+        return
+    fi
+
+    msg=$(printf '%s' "$data" | jq -r '.msg // empty' 2>/dev/null)
+    if [ -n "$msg" ]; then
+        echo "success=false, msg: \"$msg\""
+    else
+        echo "success=false (no msg field in response)"
+    fi
+}
+
 response_is_successful() {
     local data="$1"
-    local success
+    local docs success
 
     if [ -z "$data" ]; then
         return 1
     fi
 
-    if ! echo "$data" | jq empty >/dev/null 2>&1; then
+    if ! printf '%s' "$data" | jq empty >/dev/null 2>&1; then
         return 1
     fi
 
-    success=$(echo "$data" | jq -r '.success // false' 2>/dev/null)
+    # Require *exactly one* JSON value in the body.
+    #
+    # Why: if the response body ever ends up containing more than one
+    # concatenated JSON document (e.g. an upstream/proxy hiccup that
+    # duplicates the body), `jq -r '.success // false'` prints one line
+    # PER document instead of one value total. `$success` then becomes a
+    # multi-line string like "true\ntrue", which can never equal the
+    # literal "true" in the comparison below -- so a response that is
+    # genuinely {"success":true,...} gets silently treated as a failure
+    # and retried forever. This is almost certainly what you were hitting:
+    # the logged response was clearly {"success":true,...} with a real
+    # keypair, yet the call kept retrying and eventually gave up.
+    docs=$(printf '%s' "$data" | jq -rs 'length' 2>/dev/null)
+    if [ "$docs" != "1" ]; then
+        return 1
+    fi
+
+    success=$(printf '%s' "$data" | jq -r '.success // false' 2>/dev/null)
     [ "$success" = "true" ]
 }
 
 json_is_valid() {
     local data="$1"
-    echo "$data" | jq empty >/dev/null 2>&1
+    printf '%s' "$data" | jq empty >/dev/null 2>&1
 }
 
 json_has_success() {
@@ -88,7 +142,7 @@ json_has_success() {
 json_get() {
     local data="$1"
     local expr="$2"
-    echo "$data" | jq -r "$expr // empty" 2>/dev/null
+    printf '%s' "$data" | jq -r "$expr // empty" 2>/dev/null
 }
 
 create_vless_inbound() {
@@ -100,10 +154,7 @@ create_vless_inbound() {
 
     # Generate X25519 Certificate
     log "Generating X25519 certificate..."
-    CERT_RESP=$(api_call_with_retry GET "$base_url/panel/api/server/getNewX25519Cert" "" "" 30 8 3)
-    local ret=$?
-
-    if [ $ret -ne 0 ] || ! json_is_valid "$CERT_RESP" || ! json_has_success "$CERT_RESP"; then
+    if ! CERT_RESP=$(api_call_with_retry GET "$base_url/panel/api/server/getNewX25519Cert" "" "" 30 8 3); then
         err "Failed to generate X25519 cert. Raw response:"
         echo "$CERT_RESP"
         return 1
@@ -111,6 +162,12 @@ create_vless_inbound() {
 
     info "API response:"
     printf '%s\n' "$CERT_RESP"
+
+    if ! json_is_valid "$CERT_RESP" || ! json_has_success "$CERT_RESP"; then
+        err "Failed to generate X25519 cert. Raw response:"
+        echo "$CERT_RESP"
+        return 1
+    fi
 
     PRIVATE_KEY=$(json_get "$CERT_RESP" '.obj.privateKey')
     PUBLIC_KEY=$(json_get "$CERT_RESP" '.obj.publicKey')
@@ -124,10 +181,7 @@ create_vless_inbound() {
 
     # Scan Reality Targets
     log "Scanning Reality targets (this may take ~30-60s)..."
-    SCAN_RESP=$(api_call_with_retry POST "$base_url/panel/api/server/scanRealityTargets" "{}" "" 120 8 3)
-    ret=$?
-
-    if [ $ret -ne 0 ] || ! json_is_valid "$SCAN_RESP" || ! json_has_success "$SCAN_RESP"; then
+    if ! SCAN_RESP=$(api_call_with_retry POST "$base_url/panel/api/server/scanRealityTargets" "{}" "" 120 8 3); then
         err "Scan failed. Raw response:"
         echo "$SCAN_RESP"
         return 1
@@ -138,6 +192,11 @@ create_vless_inbound() {
 
     # Select Best Target
     log "Selecting best Reality target..."
+    if ! json_is_valid "$SCAN_RESP" || ! json_has_success "$SCAN_RESP"; then
+        err "Scan failed. Raw response:"
+        echo "$SCAN_RESP"
+        return 1
+    fi
 
     BEST=$(echo "$SCAN_RESP" | jq -r '
         .obj
@@ -239,13 +298,16 @@ create_vless_inbound() {
 
     # Create Inbound
     log "Creating VLESS Reality inbound..."
-    ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3)
-    ret=$?
+    if ! ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3); then
+        err "Failed to create inbound. Raw response:"
+        echo "$ADD_RESP"
+        return 1
+    fi
 
     info "API response:"
     printf '%s\n' "$ADD_RESP"
 
-    if [ $ret -ne 0 ] || ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
+    if ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
         err "Failed to create inbound. Raw response:"
         echo "$ADD_RESP"
         return 1
@@ -381,13 +443,16 @@ create_hysteria_inbound() {
 
     # Create Inbound
     log "Creating Hysteria2 inbound..."
-    ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3)
-    ret=$?
+    if ! ADD_RESP=$(api_call_with_retry POST "$base_url/panel/api/inbounds/add" "$PAYLOAD" "Content-Type: application/x-www-form-urlencoded" 60 8 3); then
+        err "Failed to create inbound. Raw response:"
+        echo "$ADD_RESP"
+        return 1
+    fi
 
     info "API response:"
     printf '%s\n' "$ADD_RESP"
 
-    if [ $ret -ne 0 ] || ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
+    if ! json_is_valid "$ADD_RESP" || ! json_has_success "$ADD_RESP"; then
         err "Failed to create inbound. Raw response:"
         echo "$ADD_RESP"
         return 1
